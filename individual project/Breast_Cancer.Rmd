@@ -1,0 +1,335 @@
+---
+output: html_document
+---
+Breast Cancer Project
+---
+Minzhe
+
+### **1. Introduction**
+*********************
+#### 1.1. Breast cancer and classification
+Breast cancer is a tumor that starts from cells of the breast. The breast is made up of glands called lobules that can make milk and thin tubes called ducts that carry the milk from the lobules to the nipple. Breast tissue also contains fat and connective tissue, lymph nodes, and blood vessels.
+
+The most common type of breast cancer is ductal carcinoma, which begins in the cells of the ducts. Breast cancer can also begin in the cells of the lobules and in other tissues in the breast.
+
+In the U.S., breast cancer is the second most common cancer in women after skin cancer. It can occur in both men and women, but it is very rare in men. Each year there are about 2,300 new cases of breast cancer in men and about 230,000 new cases in women.
+
+There are two types of breast cancer tumors: those that are non-cancerous, or ¡®benign¡¯, and those that are cancerous, which are ¡®malignant¡¯.
+
+* ***Benign Tumors***   When a tumor is diagnosed as benign, doctors will usually leave it alone rather than remove it. Even though these tumors are not generally aggressive toward surrounding tissue, occasionally they may continue to grow, pressing on organs and causing pain or other problems. In these situations, the tumor is removed, allowing pain or complications to subside.
+
+* ***Malignant tumors***   Malignant tumors are cancerous and aggressive because they invade and damage surrounding tissue. When a tumor is suspected to be malignant, the doctor will perform a biopsy to determine the severity or aggressiveness of the tumor.
+
+#### 1.2. Project goal
+The goal of this project is to build prediction models based on patients' tumor cell morphology information for breast cancer disgnosis.
+
+### **2. Data description**
+*************************
+#### 2.1. Basic information
+* Binary outcome: Diagnosis (M = malignant, B = benign)
+* 569 patients with breast cancer (357 B and 212 M)
+* 30 variables (Features are computed from a digitized image of a fine needle aspirate (FNA) of breast)
+* No missing value
+
+#### 2.2. Features
+Ten real-valued features are computed for each cell nucleus. The mean, standard error, and "worst" or largest (mean of the three
+largest values) of these features were computed for each image,
+resulting in 30 features.  For instance, field 3 is Mean Radius, field
+13 is Radius SE, field 23 is Worst Radius.
+
+All feature values are recoded with four significant digits.
+
+a) radius (mean of distances from center to points on the perimeter)
+b) texture (standard deviation of gray-scale values)
+c) perimeter
+d) area
+e) smoothness (local variation in radius lengths)
+f) compactness (perimeter^2 / area - 1.0)
+g) concavity (severity of concave portions of the contour)
+h) concave points (number of concave portions of the contour)
+i) symmetry 
+j) fractal dimension ("coastline approximation" - 1)
+
+Following is the head lines of the dataset to show the structure of data.
+
+```{r, echo = FALSE}
+bc.data <- read.csv("Breast.Cancer.Project.csv", row.names = 1)
+head(bc.data)
+```
+
+
+### **3. Data analysis methods**
+*****************************
+#### 3.1. Data pre-processing
+
+* **Dimension reduction** Pairwise correlation coefficients were calculated to find correlated variables. 
+
+#### 3.2. Data Splicing
+
+* **Training set** 75% of the data was splited into training set.
+
+* **Testing set** 25% of the data was splited into testing set.
+
+* **Resampling** Use bootstrap to resample data. For each learning algorithm, resample 25 times to train the model.
+
+#### 3.3. Modeling
+Five different machine learning model were fitted into the cleaned data, and model performances were compared.
+
+* **Generalized linear model (glm)**
+
+* **Recursive rartitioning and regression trees (rpart)**
+
+* **Random forest (rf)**
+
+* **Support vector machines (svm)**
+
+* **Generalized boosted regression model (gbm)**
+
+#### 3.4. Stacking
+Prediction outcomes from the above five learning algorithms were combined, and stacking algorithm were applied to obtain better preditions. Performance was compared to the result of each single model.
+
+* **Generalized additive model (gam)**
+
+#### 3.5. Model selection
+Differnt model were compared based on prediction **accurancy**, **sensitivity** and **specificity**. **ROC curves** were ploted for visulization. Model with best performance was selected.
+
+```{r, echo = FALSE}
+bc.data <- cbind(bc.data, diagnosis = bc.data$Diagnosis)
+bc.data <- subset(bc.data, select = -(Diagnosis))
+```
+
+### **4. Result**
+*****************
+#### 4.1. Dimension reduction
+Filter variables whoes correlation coefficient is bigger than 0.98. **Perimeter**, **raidus** and **area** variables are highly correlated variables. Raidus is linearly related to perimeter, but square proportional to area. So consider **remove** **perimeter.Worse** and **perimeter.Mean**, but maintain area.
+
+Following shows the high correlation variables and their pairs plot.
+
+```{r, fig.show = "hold", warning = FALSE, message = FALSE, echo = FALSE}
+library(GGally); library(caret)
+corr <- cor(bc.data[,-ncol(bc.data)])
+findCorrelation(corr, cutoff = 0.98, names = TRUE, verbose = TRUE)
+ggpairs(bc.data, columns = c(23,21,24,3,1,4), mapping = aes(color = diagnosis))
+bc.data <- bc.data[, -c(23,3)]
+```
+
+#### 4.2. Data Slicing
+Assign 75% of the data into training set and the rest testing set. Using bootstrap to resample data from training set 25 times to train models (default setting for caret package).
+
+```{r, echo = FALSE}
+set.seed(123456)
+inTrain <- createDataPartition(y = bc.data$diagnosis, p = 0.75, list = FALSE)
+training <- bc.data[inTrain,]
+testing <- bc.data[-inTrain,]
+```
+
+#### 4.3. Model training
+Try five learning algorithms to compare their performance: **glm**, **rpart**, **rf**, **svm**, **gbm**.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+#glm model
+model.glm <- train(diagnosis~., data = training, method = "glm")
+pred.glm <- predict(model.glm, newdata = testing)
+eva.glm <- c(confusionMatrix(pred.glm, testing$diagnosis, positive = "M")$overall[1], confusionMatrix(pred.glm, testing$diagnosis, positive = "M")$byClass[1], confusionMatrix(pred.glm, testing$diagnosis, positive = "M")$byClass[2])
+
+#rpart model
+model.rpart <- train(diagnosis~., data = training, method = "rpart")
+pred.rpart <- predict(model.rpart, newdata = testing)
+eva.rpart <- c(confusionMatrix(pred.rpart, testing$diagnosis, positive = "M")$overall[1], confusionMatrix(pred.rpart, testing$diagnosis, positive = "M")$byClass[1], confusionMatrix(pred.rpart, testing$diagnosis, positive = "M")$byClass[2])
+
+#rf model
+model.rf <- train(diagnosis~., data = training, method = "rf")
+pred.rf <- predict(model.rf, newdata = testing)
+eva.rf <- c(confusionMatrix(pred.rf, testing$diagnosis, positive = "M")$overall[1], confusionMatrix(pred.rf, testing$diagnosis, positive = "M")$byClass[1], confusionMatrix(pred.rf, testing$diagnosis, positive = "M")$byClass[2])
+
+#svm model
+model.svm <- train(diagnosis~., data = training, method = "svmLinear")
+pred.svm <- predict(model.svm, newdata = testing)
+eva.svm <- c(confusionMatrix(pred.svm, testing$diagnosis, positive = "M")$overall[1], confusionMatrix(pred.svm, testing$diagnosis, positive = "M")$byClass[1], confusionMatrix(pred.svm, testing$diagnosis, positive = "M")$byClass[2])
+
+#gbm model
+model.gbm <- train(diagnosis~., data = training, method = "gbm", verbose = FALSE)
+pred.gbm <- predict(model.gbm, newdata = testing)
+eva.gbm <- c(confusionMatrix(pred.gbm, testing$diagnosis, positive = "M")$overall[1], confusionMatrix(pred.gbm, testing$diagnosis, positive = "M")$byClass[1], confusionMatrix(pred.gbm, testing$diagnosis, positive = "M")$byClass[2])
+```
+
+#### 4.4. Performance comparsion
+Following show the prediction outcome of each model, and comparison of  their accuracy, sensitivity and specificity.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+#prediction performance comparsion
+eva.all <- round(rbind(glm = eva.glm, rpart = eva.rpart, rf = eva.rf, svm = eva.svm, gbm = eva.gbm), 3)
+pred.list <- list(glm = confusionMatrix(pred.glm, testing$diagnosis, positive = "M")$table, rpart = confusionMatrix(pred.rpart, testing$diagnosis, positive = "M")$table, rf = confusionMatrix(pred.rf, testing$diagnosis, positive = "M")$table, svm = confusionMatrix(pred.svm, testing$diagnosis, positive = "M")$table, gbm = confusionMatrix(pred.gbm, testing$diagnosis, positive = "M")$table)
+pred.list
+eva.all
+```
+
+#### 4.5. Stacking
+The accuracy of **rpart** algorithm is less satisfied than other four models. So use other four models for stacking. Apply the **glm**, **rf**, **svm** and **gbm** models to predict the training set, and combine all the predition outcomes togather to train stacking models **gam**. Then use the built model to predict testing set. Combine the predition outcome for the combined model and each single model for comparsion.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+#stacking with gam model
+predTr.glm <- predict(model.glm, newdata = training)
+predTr.rf <- predict(model.rf, newdata = training)
+predTr.svm <- predict(model.svm, newdata = training)
+predTr.gbm <- predict(model.gbm, newdata = training)
+predTr.comb <- data.frame(pred.glm = predTr.glm, pred.rf = predTr.rf, pred.svm = predTr.svm, pred.gbm = predTr.gbm, diagnosis = training$diagnosis)
+predTest.comb <- data.frame(pred.glm, pred.rf, pred.svm, pred.gbm, diagnosis = testing$diagnosis)
+
+model.comb <- train(diagnosis~., data = predTr.comb, method = "gam")
+pred.comb <- predict(model.comb, predTest.comb)
+eva.comb <- c(confusionMatrix(pred.comb, testing$diagnosis, positive = "M")$overall[1], confusionMatrix(pred.comb, testing$diagnosis, positive = "M")$byClass[1], confusionMatrix(pred.comb, testing$diagnosis, positive = "M")$byClass[2])
+
+eva.all <- rbind(eva.all, comb = round(eva.comb, 3))
+confusionMatrix(pred.comb, testing$diagnosis, positive = "M")
+```
+
+### **5. Discussion**
+**********************
+#### 5.1. Model performance
+Five differnt classification algorithm along with a stacking algorithm were used for modeling and predicting breast cancer classification based on tumor cell graphic data.
+
+* All five classification models show good performance with accuracy over 0.9.
+
+* **Recursive partition (rpart)** compared to other model, was least satisfied.
+
+* **Generalized linear model (glm)**, **Support vector machines (svm)**, **Generalized boosted regression model (gbm)** show strong predictive power with accuracy above 0.95.
+
+* **random forest (rf)** and **gbm** seem not exactly reproducible, everytime, the result is slight different. 
+
+* Stacking with **Generalized additive model (gam)** model didn't improve performance.
+
+Follwing show the ROC curve of all the individual models and combination model. Most model have pretty good ROC curve, **gbm** show relatively better sensitivity and specificity trade-off.
+
+```{r, results = "hide", echo = FALSE, warning = FALSE, message = FALSE}
+library(pROC)
+eva.all
+
+predProb.glm <- predict(model.glm, testing, type = "prob")[,"M"]
+predProb.rpart <- predict(model.rpart, testing, type = "prob")[,"M"]
+predProb.rf <- predict(model.rf, testing, type = "prob")[,"M"]
+predProb.gbm <- predict(model.gbm, testing, type = "prob")[,"M"]
+predProb.comb <- predict(model.comb, predTest.comb, type = "prob")[,"M"]
+
+plot.roc(testing$diagnosis, predProb.glm, col = "hotpink", main = "ROC curve")
+plot.roc(testing$diagnosis, predProb.rpart, col = "dodgerblue4", add = TRUE)
+plot.roc(testing$diagnosis, predProb.rf, col = "black", add = TRUE)
+plot.roc(testing$diagnosis, predProb.gbm, col = "green4", add = TRUE)
+plot.roc(testing$diagnosis, predProb.comb, col = "orange", add = TRUE)
+legend(0, 0.6, legend = c("glm", "rpart", "rf", "gbm", "comb"), col = c("hotpink", "dodgerblue4", "black", "green4", "orange"), lty = 1, lwd = 2)
+```
+
+#### 5.2 Variables importance
+Plot the top 20 most important variables in each model. **Area.Worse**, **radius.Worse**, **ConcavePoint.Worse** and **ConcavePoint.Mean** are the top 4 most important variables in **rf**, **svm** and **gbm** models. in gbm, they are even the only dominant variables for predictions, having way more importance than any other variables. These suggests that the shape (**concave point**) and area (**radius**, **area**) are probably the important features of malignancy of breast tumor cell.
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+library(gridExtra)
+plot.glm <- plot(varImp(model.glm), top = 20, main = "glm")
+plot.rf <- plot(varImp(model.rf), top = 20, main = "rf")
+plot.svm <- plot(varImp(model.svm), top = 20, main = "svm")
+plot.gbm <- plot(varImp(model.gbm), top = 20, main = "gbm")
+grid.arrange(plot.glm, plot.rf, ncol = 2)
+grid.arrange(plot.svm, plot.gbm, ncol = 2)
+```
+
+### **6. Conlusion**
+**********************
+* Multiple learning model show good performance on prediction, suggesting that it is possible to use patients tumor cell's graphic features for classification of benignancy or malignancy.
+
+### **7. Source code**
+**********************
+```{r, eval = FALSE}
+## Load data ##
+bc.data <- read.csv("Breast.Cancer.Project.csv", row.names = 1)
+head(bc.data)
+
+bc.data <- cbind(bc.data, diagnosis = bc.data$Diagnosis)
+bc.data <- subset(bc.data, select = -(Diagnosis))
+
+## Dimension reduction ##
+library(GGally); library(caret)
+corr <- cor(bc.data[,-ncol(bc.data)])
+findCorrelation(corr, cutoff = 0.98, names = TRUE, verbose = TRUE)
+ggpairs(bc.data, columns = c(23,21,24,3,1,4), mapping = aes(color = diagnosis))
+bc.data <- bc.data[, -c(23,3)]
+
+## Data slicing
+set.seed(123456)
+inTrain <- createDataPartition(y = bc.data$diagnosis, p = 0.75, list = FALSE)
+training <- bc.data[inTrain,]
+testing <- bc.data[-inTrain,]
+
+## Model training ##
+#glm model
+model.glm <- train(diagnosis~., data = training, method = "glm")
+pred.glm <- predict(model.glm, newdata = testing)
+eva.glm <- c(confusionMatrix(pred.glm, testing$diagnosis, positive = "M")$overall[1], confusionMatrix(pred.glm, testing$diagnosis, positive = "M")$byClass[1], confusionMatrix(pred.glm, testing$diagnosis, positive = "M")$byClass[2])
+
+#rpart model
+model.rpart <- train(diagnosis~., data = training, method = "rpart")
+pred.rpart <- predict(model.rpart, newdata = testing)
+eva.rpart <- c(confusionMatrix(pred.rpart, testing$diagnosis, positive = "M")$overall[1], confusionMatrix(pred.rpart, testing$diagnosis, positive = "M")$byClass[1], confusionMatrix(pred.rpart, testing$diagnosis, positive = "M")$byClass[2])
+
+#rf model
+model.rf <- train(diagnosis~., data = training, method = "rf")
+pred.rf <- predict(model.rf, newdata = testing)
+eva.rf <- c(confusionMatrix(pred.rf, testing$diagnosis, positive = "M")$overall[1], confusionMatrix(pred.rf, testing$diagnosis, positive = "M")$byClass[1], confusionMatrix(pred.rf, testing$diagnosis, positive = "M")$byClass[2])
+
+#svm model
+model.svm <- train(diagnosis~., data = training, method = "svmLinear")
+pred.svm <- predict(model.svm, newdata = testing)
+eva.svm <- c(confusionMatrix(pred.svm, testing$diagnosis, positive = "M")$overall[1], confusionMatrix(pred.svm, testing$diagnosis, positive = "M")$byClass[1], confusionMatrix(pred.svm, testing$diagnosis, positive = "M")$byClass[2])
+
+#gbm model
+model.gbm <- train(diagnosis~., data = training, method = "gbm", verbose = FALSE)
+pred.gbm <- predict(model.gbm, newdata = testing)
+eva.gbm <- c(confusionMatrix(pred.gbm, testing$diagnosis, positive = "M")$overall[1], confusionMatrix(pred.gbm, testing$diagnosis, positive = "M")$byClass[1], confusionMatrix(pred.gbm, testing$diagnosis, positive = "M")$byClass[2])
+
+#prediction performance comparsion
+eva.all <- round(rbind(glm = eva.glm, rpart = eva.rpart, rf = eva.rf, svm = eva.svm, gbm = eva.gbm), 3)
+pred.list <- list(glm = confusionMatrix(pred.glm, testing$diagnosis, positive = "M")$table, rpart = confusionMatrix(pred.rpart, testing$diagnosis, positive = "M")$table, rf = confusionMatrix(pred.rf, testing$diagnosis, positive = "M")$table, svm = confusionMatrix(pred.svm, testing$diagnosis, positive = "M")$table, gbm = confusionMatrix(pred.gbm, testing$diagnosis, positive = "M")$table)
+pred.list
+eva.all
+
+#stacking with gam model
+predTr.glm <- predict(model.glm, newdata = training)
+predTr.rf <- predict(model.rf, newdata = training)
+predTr.svm <- predict(model.svm, newdata = training)
+predTr.gbm <- predict(model.gbm, newdata = training)
+predTr.comb <- data.frame(pred.glm = predTr.glm, pred.rf = predTr.rf, pred.svm = predTr.svm, pred.gbm = predTr.gbm, diagnosis = training$diagnosis)
+predTest.comb <- data.frame(pred.glm, pred.rf, pred.svm, pred.gbm, diagnosis = testing$diagnosis)
+
+model.comb <- train(diagnosis~., data = predTr.comb, method = "gam")
+pred.comb <- predict(model.comb, predTest.comb)
+eva.comb <- c(confusionMatrix(pred.comb, testing$diagnosis, positive = "M")$overall[1], confusionMatrix(pred.comb, testing$diagnosis, positive = "M")$byClass[1], confusionMatrix(pred.comb, testing$diagnosis, positive = "M")$byClass[2])
+
+eva.all <- rbind(eva.all, comb = round(eva.comb, 3))
+confusionMatrix(pred.comb, testing$diagnosis, positive = "M")
+
+## Model performance ##
+#ROC curve
+library(pROC)
+eva.all
+
+predProb.glm <- predict(model.glm, testing, type = "prob")[,"M"]
+predProb.rpart <- predict(model.rpart, testing, type = "prob")[,"M"]
+predProb.rf <- predict(model.rf, testing, type = "prob")[,"M"]
+predProb.gbm <- predict(model.gbm, testing, type = "prob")[,"M"]
+predProb.comb <- predict(model.comb, predTest.comb, type = "prob")[,"M"]
+
+plot.roc(testing$diagnosis, predProb.glm, col = "hotpink", main = "ROC curve")
+plot.roc(testing$diagnosis, predProb.rpart, col = "dodgerblue4", add = TRUE)
+plot.roc(testing$diagnosis, predProb.rf, col = "black", add = TRUE)
+plot.roc(testing$diagnosis, predProb.gbm, col = "green4", add = TRUE)
+plot.roc(testing$diagnosis, predProb.comb, col = "orange", add = TRUE)
+legend(0, 0.6, legend = c("glm", "rpart", "rf", "gbm", "comb"), col = c("hotpink", "dodgerblue4", "black", "green4", "orange"), lty = 1, lwd = 2)
+
+#variable importance
+library(gridExtra)
+plot.glm <- plot(varImp(model.glm), top = 20, main = "glm")
+plot.rf <- plot(varImp(model.gf), top = 20, mian = "rf")
+plot.svm <- plot(varImp(model.svm), top = 20, main = "svm")
+plot.gbm <- plot(varImp(model.gbm), top = 20, main = "gbm")
+grid.arrange(plot.glm, plot.rf, ncol = 2)
+grid.arrange(plot.svm, plot.gbm, ncol = 2)
+```
